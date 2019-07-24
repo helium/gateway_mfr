@@ -1,0 +1,32 @@
+{"1.1.0",
+[{<<"clique">>,
+  {git,"https://github.com/helium/clique.git",
+       {ref,"e327ba3058004c32dd2166416a60497ba87933af"}},
+  0},
+ {<<"cuttlefish">>,
+  {git,"https://github.com/helium/cuttlefish.git",
+       {ref,"8672838e8f4ef61602aee6e4ff97ec9be54031dc"}},
+  1},
+ {<<"ecc508">>,
+  {git,"https://github.com/helium/ecc508.git",
+       {ref,"83cb254acd5097d14ec94eb7643b75858c65b015"}},
+  0},
+ {<<"ecc_compact">>,
+  {git,"https://github.com/helium/ecc_compact.git",
+       {ref,"a4508cbfa31f7c6f1a5b4e0391c1cc7d185ae0b1"}},
+  0},
+ {<<"erl_base58">>,{pkg,<<"erl_base58">>,<<"0.0.1">>},0},
+ {<<"erlang_ale">>,
+  {git,"https://github.com/helium/erlang_ale",
+       {ref,"51660733919319372b78412b8fef08bbb53b8c29"}},
+  1},
+ {<<"getopt">>,{pkg,<<"getopt">>,<<"1.0.1">>},2},
+ {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},3},
+ {<<"lager">>,{pkg,<<"lager">>,<<"3.6.3">>},2}]}.
+[
+{pkg_hash,[
+ {<<"erl_base58">>, <<"37710854461D71DF338E73C65776302DB41C4BAB4674D2EC134ED7BCFC7B5552">>},
+ {<<"getopt">>, <<"C73A9FA687B217F2FF79F68A3B637711BB1936E712B521D8CE466B29CBF7808A">>},
+ {<<"goldrush">>, <<"F06E5D5F1277DA5C413E84D5A2924174182FB108DABB39D5EC548B27424CD106">>},
+ {<<"lager">>, <<"FE78951D174616273F87F0DBC3374D1430B1952E5EFC4E1C995592D30A207294">>}]}
+].

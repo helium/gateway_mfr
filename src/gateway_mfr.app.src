@@ -1,0 +1,19 @@
+{application, gateway_mfr,
+ [{description, "Manufacturing scripts for Helium gateways"},
+  {vsn, "git"},
+  {registered, []},
+  {mod, { gateway_mfr, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    public_key,
+    ecc_compact,
+    clique
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {maintainers, []},
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.
