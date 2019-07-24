@@ -2,7 +2,7 @@
 
 -behavior(gen_server).
 
--define(WORKER, gateway_config).
+-define(WORKER, gateway_mfr).
 
 %% gen_server
 -export([start_link/0,
