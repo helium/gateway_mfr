@@ -123,13 +123,17 @@ handle_provision(State=#state{ecc_handle=Pid}) ->
 
 handle_onboarding_key(#state{ecc_handle=Pid}) ->
     ecc508:wake(Pid),
-    {ok, PubKey} = ecc508:genkey(Pid, public, ?ONBOARDING_SLOT),
-    case ecc_compact:is_compact(PubKey) of
-        {true, CompactKey} ->
-            B58PubKey = base58check_encode(16#00, <<0:8, CompactKey/binary>>),
-            {ok, B58PubKey};
-        false ->
-            {error, not_compact}
+    case ecc508:genkey(Pid, public, ?ONBOARDING_SLOT) of
+        {error, Error} ->
+            {error, Error};
+        {ok, PubKey} ->
+            case ecc_compact:is_compact(PubKey) of
+                {true, CompactKey} ->
+                    B58PubKey = base58check_encode(16#00, <<0:8, CompactKey/binary>>),
+                    {ok, B58PubKey};
+                false ->
+                    {error, not_compact}
+            end
     end.
 
 
@@ -213,8 +217,8 @@ check_key_configuration(Pid) ->
                         case ecc508:get_key_config(Pid, Slot) of
                             {ok, ECCKeyConfig} ->
                                 ok;
-                            {ok, Other} ->
-                                {error, {invalid_key_config, Slot, Other}};
+                            {ok, _Other} ->
+                                {error, {invalid_key_config, Slot}};
                             {error, Error} ->
                                 {error, Error}
                         end;
@@ -232,9 +236,9 @@ check_onboarding_key(Pid) ->
                 false -> {error, key_not_compact}
             end;
         {false, _} ->
-            {error, onboarding_slot_unlocked};
+            {error, unlocked};
         {_, {error, Error}} ->
-            {error, {no_onboarding_key, Error}}
+            {error, Error}
     end.
 
 
