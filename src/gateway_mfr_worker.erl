@@ -226,8 +226,11 @@ check_key_configuration(Pid) ->
 check_onboarding_key(Pid) ->
     case {ecc508:get_slot_locked(Pid, ?ONBOARDING_SLOT),
           ecc508:genkey(Pid, public, ?ONBOARDING_SLOT)} of
-        {true, {ok, _}} ->
-            ok;
+        {true, {ok, PubKey}} ->
+            case ecc_compact:is_compact(PubKey) of
+                {true, _} -> ok;
+                false -> {error, key_not_compact}
+            end;
         {false, _} ->
             {error, onboarding_slot_unlocked};
         {_, {error, Error}} ->
