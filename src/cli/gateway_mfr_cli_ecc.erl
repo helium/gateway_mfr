@@ -40,6 +40,7 @@ ecc_usage() ->
      ["ECC commands\n\n",
       "  test - Validates that the attached ECC is working and locked correctly.\n"
       "  provision - Validates that the attached ECC is working and locked correctly.\n"
+      "  onboarding - Prints the onboarding key of a provisioned ECC.\n"
      ]
     ].
 
@@ -65,19 +66,16 @@ ecc_test_usage() ->
      ]
     ].
 
-ecc_test(["ecc", "test"], [], Flags) ->
-    AllServices = gateway_config:wifi_services(),
-    Services = case proplists:get_value(gatt, Flags, false) of
-                   false ->
-                       AllServices;
-                   _ ->
-                       {ok, S, _} = gateway_gatt_char_wifi_services:encode_services(AllServices),
-                       S
-               end,
-    FormatService = fun({Name, Strength}) ->
-                            [{name, Name}, {strength, Strength}]
-                    end,
-    [clique_status:table([FormatService(S) || S <- Services])];
+ecc_test(["ecc", "test"], [], []) ->
+    TestResults = gateway_mfr_worker:ecc_test(),
+    FormatResult = fun({Name, Result}) ->
+                           [{name, Name}, {result, Result}]
+                   end,
+    Status = case lists:all(fun({_, S}) -> S == ok end, TestResults) of
+                 true -> 0;
+                 _ -> 1
+             end,
+{exit_status, Status, [clique_status:table(lists:map(FormatResult, TestResults))]};
 ecc_test([_, _, _], [], []) ->
     usage.
 
@@ -108,7 +106,8 @@ ecc_provision(["ecc", "provision"], [], []) ->
         {ok, B58Key} ->
             [clique_status:text(B58Key)];
         {error, Error} ->
-            lager:error("Failed to provision ECC ~p", [Error])
+            Msg = io_lib:format("~p", [Error]),
+            {exit_status, 1, [clique_status:alert([clique_status:text(Msg)])]}
     end;
 ecc_provision([_, _], [], []) ->
     usage.
@@ -139,7 +138,8 @@ ecc_onboarding(["ecc", "onboarding"], [], []) ->
         {ok, B58Key} ->
             [clique_status:text(B58Key)];
         {error, Error} ->
-            lager:error("Failed to onboarding ECC ~p", [Error])
+            Msg = io_lib:format("~p", [Error]),
+            {exit_status, 1, [clique_status:alert([clique_status:text(Msg)])]}
     end;
 ecc_onboarding([_, _], [], []) ->
     usage.

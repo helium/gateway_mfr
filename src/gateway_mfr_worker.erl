@@ -46,7 +46,10 @@ init(_) ->
 
 
 handle_call(ecc_provision, _From, State=#state{}) ->
-    {reply, handle_provision(State), State};
+    case can_provision(State) of
+        ok -> {reply, handle_provision(State), State};
+        {error, Error} -> {reply, {error, Error}, State}
+    end;
 handle_call(ecc_test, _From, State=#state{}) ->
     {reply, handle_test(State), State};
 handle_call(ecc_onboarding, _From, State=#state{}) ->
@@ -66,6 +69,16 @@ terminate(_Reason, #state{ecc_handle=ECCHandle}) ->
 %%
 %% Internal
 %%
+
+can_provision(#state{ecc_handle=Pid}) ->
+    ecc508:wake(Pid),
+    case {ecc508:get_locked(Pid, config), ecc508:get_locked(Pid, data)} of
+        {{ok, false}, {ok, false}} ->
+            ok;
+        {{ok, ConfigLocked}, {ok, DataLocked}} ->
+            {error, {zone_locked, [{config, ConfigLocked},
+                                   {data, DataLocked}]}}
+    end.
 
 %% Provisions the ECC to make it ready for our use.
 %%
@@ -120,8 +133,106 @@ handle_onboarding_key(#state{ecc_handle=Pid}) ->
     end.
 
 
-handle_test(#state{ecc_handle=_Pid}) ->
-    ok.
+%% Checking whether the ECC is ready for shipment means verifying
+%% that:
+%%
+%% 1. it's available and version matches
+%%
+%% 2. The configuration and data zone are locked
+%%
+%% 3. The configuraiton slots are configured to be ECDH/ECC slots for
+%% all but the onboarding slot which is ECC only
+%%
+%% 4. The key configuration is set to ecc key configuration for all
+%% slots
+%%
+%% 5. The onboarding slot is locked and has a key in it.
+%%
+handle_test(#state{ecc_handle=Pid}) ->
+    ecc508:wake(Pid),
+    lists:map(fun({Key, Fun}) ->
+                      {Key, Fun(Pid)}
+                end, [
+                      {serial_num, fun check_serial/1},
+                      {config_zone_lock, fun check_zone_config_lock/1},
+                      {data_zone_lock, fun check_zone_data_lock/1},
+                      {slot_config, fun check_slot_configuration/1},
+                      {key_config, fun check_key_configuration/1},
+                      {onboarding_key, fun check_onboarding_key/1}
+                     ]).
+
+check_serial(Pid) ->
+    case ecc508:serial_num(Pid) of
+        {ok, <<16#01, 16#23, _:6/binary, 16#EE>>} ->
+            ok;
+        {ok, Other} ->
+            {error, {unexpected_serial, Other}};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+check_zone_config_lock(Pid) ->
+    case ecc508:get_locked(Pid , config) of
+        {ok, true} -> ok;
+        {ok, false} -> {error, unlocked};
+        {error, Error} -> {error, Error}
+    end.
+
+
+check_zone_data_lock(Pid) ->
+    case ecc508:get_locked(Pid, data) of
+        {ok, true} -> ok;
+        {ok, false} -> {error, unlocked};
+        {error, Error} -> {error, Error}
+    end.
+
+check_slot_configuration(Pid) ->
+    ECCConfig = ecc508:ecc_slot_config(),
+    ECDHConfig = ECCConfig#{read_key =>
+                                [ecdh_operation,
+                                 internal_signatures,
+                                 external_signatures]},
+    lists:foldl(fun(Slot, ok) ->
+                        case ecc508:get_slot_config(Pid, Slot) of
+                            {ok, ECCConfig} when Slot == ?ONBOARDING_SLOT ->
+                                ok;
+                            {ok, ECDHConfig} when Slot /= ?ONBOARDING_SLOT ->
+                                ok;
+                            {ok, _Other} ->
+                                {error, {invalid_slot_config, Slot}};
+                            {error, Error} ->
+                                {error, Error}
+                        end;
+                   (_Slot, Error) ->
+                        Error
+                end, ok, lists:seq(0, 15)).
+
+check_key_configuration(Pid) ->
+    ECCKeyConfig = ecc508:ecc_key_config(),
+    lists:foldl(fun(Slot, ok) ->
+                        case ecc508:get_key_config(Pid, Slot) of
+                            {ok, ECCKeyConfig} ->
+                                ok;
+                            {ok, Other} ->
+                                {error, {invalid_key_config, Slot, Other}};
+                            {error, Error} ->
+                                {error, Error}
+                        end;
+                   (_Slot, Error) ->
+                        Error
+                end, ok, lists:seq(0, 15)).
+
+
+check_onboarding_key(Pid) ->
+    case {ecc508:get_slot_locked(Pid, ?ONBOARDING_SLOT),
+          ecc508:genkey(Pid, public, ?ONBOARDING_SLOT)} of
+        {true, {ok, _}} ->
+            ok;
+        {false, _} ->
+            {error, onboarding_slot_unlocked};
+        {_, {error, Error}} ->
+            {error, {no_onboarding_key, Error}}
+    end.
 
 
 %%
