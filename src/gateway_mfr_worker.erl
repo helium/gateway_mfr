@@ -76,6 +76,7 @@ terminate(_Reason, #state{ecc_handle=ECCHandle}) ->
 %% Internal
 %%
 
+-spec can_provision(#state{}) -> ok | {error, term()}.
 can_provision(#state{ecc_handle=Pid}) ->
     ecc508:wake(Pid),
     case {ecc508:get_locked(Pid, config), ecc508:get_locked(Pid, data)} of
@@ -128,6 +129,7 @@ handle_provision(State=#state{ecc_handle=Pid}) ->
     ok = handle_provision_onboard(State),
     handle_onboarding_key(State).
 
+-spec handle_provision_onboard(#state{}) -> ok | {error, term()}.
 handle_provision_onboard(State=#state{ecc_handle=Pid}) ->
     Tests = run_tests([config_zone_lock,
                        data_zone_lock,
@@ -144,7 +146,7 @@ handle_provision_onboard(State=#state{ecc_handle=Pid}) ->
             %% No Failures, go generate and lock onboarding
             ecc508:wake(Pid),
             %% Generate ONBOARDING slot and lock the slot
-            ok = gen_compact_key(Pid, ?ONBOARDING_SLOT, 100),
+            ok = gen_compact_key(Pid, ?ONBOARDING_SLOT),
             ok = ecc508:lock(Pid, {slot, ?ONBOARDING_SLOT}),
             ecc508:idle(Pid),
             ok;
@@ -152,6 +154,7 @@ handle_provision_onboard(State=#state{ecc_handle=Pid}) ->
             {error, Failures}
     end.
 
+-spec handle_onboarding_key(#state{}) -> {ok, string()} | {error, term()}.
 handle_onboarding_key(#state{ecc_handle=Pid}) ->
     ecc508:wake(Pid),
     case ecc508:genkey(Pid, public, ?ONBOARDING_SLOT) of
@@ -167,26 +170,27 @@ handle_onboarding_key(#state{ecc_handle=Pid}) ->
             end
     end.
 
+-spec run_tests([Test::term()], #state{}) -> [{Test::term(), ok | {error, term()}}].
 run_tests(Tests, #state{ecc_handle=Pid}) ->
     ecc508:wake(Pid),
     run_tests(Tests, Pid, []).
 
 run_tests([], _, Acc) ->
     lists:reverse(Acc);
-run_tests([serial_num | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{serial_num, check_serial(Pid)} | Acc]);
-run_tests([config_zone_lock | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{config_zone_lock, check_zone_config_lock(Pid)} | Acc]);
-run_tests([data_zone_lock | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{data_zone_lock, check_zone_data_lock(Pid)} | Acc]);
-run_tests([slot_config | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{slot_config, check_slot_configuration(Pid)} | Acc]);
-run_tests([key_config | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{key_config, check_key_configuration(Pid)} | Acc]);
-run_tests([onboarding_key | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{key_config, check_onboarding_key(Pid)} | Acc]);
-run_tests([{slot_unlocked, Slot} | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{key_config, check_slot_unlocked(Slot, Pid)} | Acc]).
+run_tests([serial_num=N | Tail], Pid, Acc) ->
+    run_tests(Tail, Pid, [{N, check_serial(Pid)} | Acc]);
+run_tests([{zone_locked, Zone}=N | Tail], Pid, Acc) ->
+    run_tests(Tail, Pid, [{N, check_zone_locked(Zone, Pid)} | Acc]);
+run_tests([slot_config=N | Tail], Pid, Acc) ->
+    run_tests(Tail, Pid, [{N, check_slot_configuration(Pid)} | Acc]);
+run_tests([key_config=N | Tail], Pid, Acc) ->
+    run_tests(Tail, Pid, [{N, check_key_configuration(Pid)} | Acc]);
+run_tests([onboarding_key=N | Tail], Pid, Acc) ->
+    run_tests(Tail, Pid, [{N, check_onboarding_key(Pid)} | Acc]);
+run_tests([{slot_unlocked, Slot}=N | Tail], Pid, Acc) ->
+    run_tests(Tail, Pid, [{N, check_slot_unlocked(Slot, Pid)} | Acc]);
+run_tests([{slot_locked, Slot}=N | Tail], Pid, Acc) ->
+    run_tests(Tail, Pid, [{N, check_slot_locked(Slot, Pid)} | Acc]).
 
 
 
@@ -207,13 +211,15 @@ run_tests([{slot_unlocked, Slot} | Tail], Pid, Acc) ->
 %%
 handle_test(State=#state{}) ->
     run_tests([serial_num,
-               config_zone_lock,
-               data_zone_lock,
+               {zone_locked, config},
+               {zone_locked, data},
                slot_config,
                key_config,
-               onboarding_key
+               onboarding_key,
+               {slot_locked, ?ONBOARDING_SLOT}
               ], State).
 
+-spec check_serial(pid()) -> ok | {error, term()}.
 check_serial(Pid) ->
     case ecc508:serial_num(Pid) of
         {ok, <<16#01, 16#23, _:6/binary, 16#EE>>} ->
@@ -224,28 +230,31 @@ check_serial(Pid) ->
             {error, Error}
     end.
 
-check_zone_config_lock(Pid) ->
-    case ecc508:get_locked(Pid , config) of
+-spec check_zone_locked(config | data, pid()) -> ok | {error, term()}.
+check_zone_locked(Zone, Pid) ->
+    case ecc508:get_locked(Pid, Zone) of
         {ok, true} -> ok;
         {ok, false} -> {error, unlocked};
         {error, Error} -> {error, Error}
     end.
 
-
+-spec check_slot_unlocked(non_neg_integer(), pid()) -> ok | {error, term()}.
 check_slot_unlocked(Slot, Pid) ->
     case ecc508:get_slot_locked(Pid, Slot) of
-        {ok, true} -> {error, locked};
-        {ok, false} -> ok;
+        true -> {error, locked};
+        false -> ok;
         {error, Error} -> {error, Error}
     end.
 
-check_zone_data_lock(Pid) ->
-    case ecc508:get_locked(Pid, data) of
-        {ok, true} -> ok;
-        {ok, false} -> {error, unlocked};
+-spec check_slot_locked(non_neg_integer(), pid()) -> ok | {error, term()}.
+check_slot_locked(Slot, Pid) ->
+    case ecc508:get_slot_locked(Pid, Slot) of
+        true -> ok;
+        false -> {error, unlocked};
         {error, Error} -> {error, Error}
     end.
 
+-spec check_slot_configuration(pid()) -> ok | {error, term()}.
 check_slot_configuration(Pid) ->
     ECCConfig = ecc508:ecc_slot_config(),
     ECDHConfig = ECCConfig#{read_key =>
@@ -267,6 +276,7 @@ check_slot_configuration(Pid) ->
                         Error
                 end, ok, lists:seq(0, 15)).
 
+-spec check_key_configuration(pid()) -> ok | {error, term()}.
 check_key_configuration(Pid) ->
     ECCKeyConfig = ecc508:ecc_key_config(),
     lists:foldl(fun(Slot, ok) ->
@@ -283,17 +293,15 @@ check_key_configuration(Pid) ->
                 end, ok, lists:seq(0, 15)).
 
 
+-spec check_onboarding_key(pid()) -> ok | {error, term()}.
 check_onboarding_key(Pid) ->
-    case {ecc508:get_slot_locked(Pid, ?ONBOARDING_SLOT),
-          ecc508:genkey(Pid, public, ?ONBOARDING_SLOT)} of
-        {true, {ok, PubKey}} ->
+    case ecc508:genkey(Pid, public, ?ONBOARDING_SLOT) of
+        {ok, PubKey} ->
             case ecc_compact:is_compact(PubKey) of
                 {true, _} -> ok;
-                false -> {error, key_not_compact}
+                false -> {error, not_compact}
             end;
-        {false, _} ->
-            {error, unlocked};
-        {_, {error, Error}} ->
+        {error, Error} ->
             {error, Error}
     end.
 
@@ -301,6 +309,9 @@ check_onboarding_key(Pid) ->
 %%
 %% Utilities
 %%
+
+gen_compact_key(Pid, Slot) ->
+    gen_compact_key(Pid, Slot, 100).
 
 gen_compact_key(_Pid, _Slot, 0) ->
     {error, compact_key_create_failed};

@@ -9,7 +9,7 @@
   1},
  {<<"ecc508">>,
   {git,"https://github.com/helium/ecc508.git",
-       {ref,"5b6059342f8357362b20c61b0080a9ea13b76a6f"}},
+       {ref,"f308c8b81457fe635a9bb573731535c24f6ee683"}},
   0},
  {<<"ecc_compact">>,
   {git,"https://github.com/helium/ecc_compact.git",
