@@ -124,15 +124,15 @@ handle_provision(State=#state{ecc_handle=Pid}) ->
     ecc508:lock(Pid, data),
     ecc508:idle(Pid),
     %% Generate key slot 15 and lock the slot
-    ok = gen_compact_key(Pid, ?ONBOARDING_SLOT, 3),
+    ok = gen_compact_key(Pid, ?ONBOARDING_SLOT),
     ok = ecc508:lock(Pid, {slot, ?ONBOARDING_SLOT}),
     ok = handle_provision_onboard(State),
     handle_onboarding_key(State).
 
 -spec handle_provision_onboard(#state{}) -> ok | {error, term()}.
 handle_provision_onboard(State=#state{ecc_handle=Pid}) ->
-    Tests = run_tests([config_zone_lock,
-                       data_zone_lock,
+    Tests = run_tests([{zone_locked, config},
+                       {zone_locked, data},
                        slot_config,
                        key_config,
                        {slot_unlocked, ?ONBOARDING_SLOT}
