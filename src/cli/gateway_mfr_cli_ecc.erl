@@ -42,8 +42,8 @@ ecc_usage() ->
      ["ECC commands\n\n",
       "  test - Validates that the attached ECC is working and locked correctly.\n"
       "  provision - Configures and locks the ECC key slots and onboarding key.\n"
-      "  onboard - Configures the onboard key for an ECC that failed \n"
-      "            onboarding key generation.\n"
+      "  provision_onboard - Configures the onboard key for an ECC that failed \n"
+      "                      onboarding key generation.\n"
       "  onboarding - Prints the onboarding key of a provisioned ECC.\n"
      ]
     ].
