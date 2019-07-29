@@ -116,7 +116,7 @@ handle_provision(State=#state{ecc_handle=Pid}) ->
     ecc508:lock(Pid, config),
     ecc508:lock(Pid, data),
     %% Generate key slot 15 and lock the slot
-    ok = gen_compact_key(Pid, ?ONBOARDING_SLOT, 3),
+    ok = gen_compact_key(Pid, ?ONBOARDING_SLOT, 100),
     ok = ecc508:lock(Pid, {slot, ?ONBOARDING_SLOT}),
     ecc508:idle(Pid),
     handle_onboarding_key(State).
