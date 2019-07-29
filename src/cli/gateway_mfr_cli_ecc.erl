@@ -171,7 +171,7 @@ ecc_onboarding_cmd() ->
 ecc_onboarding_usage() ->
     [["ecc", "onboarding"],
      ["ecc onboarding \n\n",
-      "  Retrieves the onboarding key of a _provisioned ECC.\n"
+      "  Retrieves the onboarding key of a provisioned ECC.\n"
      ]
     ].
 
