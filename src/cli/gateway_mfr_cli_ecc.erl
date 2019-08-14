@@ -79,7 +79,7 @@ ecc_test(["ecc", "test"], [], []) ->
                  true -> 0;
                  _ -> 1
              end,
-{exit_status, Status, [clique_status:table(lists:map(FormatResult, TestResults))]};
+    {exit_status, Status, [clique_status:table(lists:map(FormatResult, TestResults))]};
 ecc_test([_, _, _], [], []) ->
     usage.
 
@@ -108,7 +108,7 @@ ecc_provision_usage() ->
 ecc_provision(["ecc", "provision"], [], []) ->
     case gateway_mfr_worker:ecc_provision() of
         {ok, B58Key} ->
-            [clique_status:text(B58Key)];
+            {exit_status, 0, [clique_status:text(B58Key)]};
         {error, Error} ->
             Msg = io_lib:format("~p", [Error]),
             {exit_status, 1, [clique_status:alert([clique_status:text(Msg)])]}
