@@ -70,7 +70,7 @@ ecc_test_usage() ->
      ]
     ].
 
-ecc_test(["ecc", "test"], [], []) ->
+ecc_test_results() ->
     TestResults = gateway_mfr_worker:ecc_test(),
     FormatResult = fun({Name, Result}) ->
                            [{name, Name}, {result, Result}]
@@ -79,6 +79,10 @@ ecc_test(["ecc", "test"], [], []) ->
                  true -> 0;
                  _ -> 1
              end,
+    {Status, FormatResult, TestResults}.
+
+ecc_test(["ecc", "test"], [], []) ->
+    {Status, FormatResult, TestResults} = ecc_test_results(),
     {exit_status, Status, [clique_status:table(lists:map(FormatResult, TestResults))]};
 ecc_test([_, _, _], [], []) ->
     usage.
@@ -108,10 +112,12 @@ ecc_provision_usage() ->
 ecc_provision(["ecc", "provision"], [], []) ->
     case gateway_mfr_worker:ecc_provision() of
         {ok, B58Key} ->
-            {exit_status, 0, [clique_status:text(B58Key)]};
+            {Status, FormatResult, TestResults} = ecc_test_results(),
+            {exit_status, Status, [clique_status:text(B58Key), clique_status:table(lists:map(FormatResult, TestResults))]};
         {error, Error} ->
             Msg = io_lib:format("~p", [Error]),
-            {exit_status, 1, [clique_status:alert([clique_status:text(Msg)])]}
+            {_Status, FormatResult, TestResults} = ecc_test_results(),
+            {exit_status, 1, [clique_status:alert([clique_status:text(Msg), clique_status:table(lists:map(FormatResult, TestResults))])]}
     end;
 ecc_provision([_, _], [], []) ->
     usage.
