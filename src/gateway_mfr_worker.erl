@@ -14,10 +14,10 @@
 -export([ecc_provision/0,
          ecc_provision_onboard/0,
          ecc_test/0,
-         ecc_onboarding/0]).
+         ecc_miner/0]).
 
 
--define(ONBOARDING_SLOT, 15).
+-define(KEY_SLOT, 0).
 
 -record(state, {
                 ecc_handle :: pid()
@@ -33,9 +33,8 @@ ecc_provision_onboard() ->
 ecc_test() ->
     gen_server:call(?WORKER, ecc_test).
 
-ecc_onboarding() ->
-    gen_server:call(?WORKER, ecc_onboarding).
-
+ecc_miner() ->
+    gen_server:call(?WORKER, ecc_miner).
 
 
 %% gen_server
@@ -55,11 +54,11 @@ handle_call(ecc_provision, _From, State=#state{}) ->
         {error, Error} -> {reply, {error, Error}, State}
     end;
 handle_call(ecc_provision_onboard, _From, State=#state{}) ->
-    {reply, handle_provision_onboard(State), State};
+    {reply, handle_provision_miner_key(State), State};
 handle_call(ecc_test, _From, State=#state{}) ->
     {reply, handle_test(State), State};
-handle_call(ecc_onboarding, _From, State=#state{}) ->
-    {reply, handle_onboarding_key(State), State};
+handle_call(ecc_miner, _From, State=#state{}) ->
+    {reply, handle_miner_key(State), State};
 handle_call(Msg, _From, State=#state{}) ->
     lager:warning("Unhandled call ~p", [Msg]),
     {reply, ok, State}.
@@ -89,27 +88,21 @@ can_provision(#state{ecc_handle=Pid}) ->
 
 %% Provisions the ECC to make it ready for our use.
 %%
-%% 1. Conifgure slots 0-14 for lockable ECC slots _with_ ECDH
+%% 1. Conifgure slots 0-15 for lockable ECC slots _with_ ECDH
 %% operation
 %%
-%% 2. Configure slot 15 for ECC slot _without_ ECDH operation. This
-%% slot is for the onboarding key.
+%% 2. Lock the configuration and data zones.
 %%
-%% 3. Lock the configuration and data zones.
+%% 3. Generate miner key in slot 0
 %%
-%% 4. Generate onboarding key in slot 15 and lock the slot
-%%
-%% 5. Return the onboarding key in b58 encoded form the way
-%% libp2p_crypto does
+%% 4. Return the miner key in b58 encoded form the way libp2p_crypto does
 handle_provision(State=#state{ecc_handle=Pid}) ->
     ECCSlotConfig = ecc508:ecc_slot_config(),
     ECDHSlotConfig = ECCSlotConfig#{read_key => [ecdh_operation, internal_signatures, external_signatures]},
     ecc508:wake(Pid),
-    %% Onboarding key does not have ecdh enabled
-    ok = ecc508:set_slot_config(Pid, 15, ECCSlotConfig),
     lists:foreach(fun(Slot) ->
                           ok = ecc508:set_slot_config(Pid, Slot, ECDHSlotConfig)
-                  end, lists:seq(0, 15) -- [?ONBOARDING_SLOT]),
+                  end, lists:seq(0, 15)),
     ecc508:idle(Pid),
     %% Configure key slots for private keys
     ECCKeyConfig = ecc508:ecc_key_config(),
@@ -123,17 +116,17 @@ handle_provision(State=#state{ecc_handle=Pid}) ->
     ecc508:lock(Pid, config),
     ecc508:lock(Pid, data),
     ecc508:idle(Pid),
-    %% Generate key slot 15 and lock the slot
-    ok = handle_provision_onboard(State),
-    handle_onboarding_key(State).
+    %% Generate key slot 0
+    ok = handle_provision_miner_key(State),
+    handle_miner_key(State).
 
--spec handle_provision_onboard(#state{}) -> ok | {error, term()}.
-handle_provision_onboard(State=#state{ecc_handle=Pid}) ->
+-spec handle_provision_miner_key(#state{}) -> ok | {error, term()}.
+handle_provision_miner_key(State=#state{ecc_handle=Pid}) ->
     Tests = run_tests([{zone_locked, config},
                        {zone_locked, data},
                        slot_config,
                        key_config,
-                       {slot_unlocked, ?ONBOARDING_SLOT}
+                       {slot_unlocked, ?KEY_SLOT}
                       ], State),
     case lists:filter(fun({_, ok}) ->
                               false;
@@ -141,21 +134,21 @@ handle_provision_onboard(State=#state{ecc_handle=Pid}) ->
                               true
                       end, Tests) of
         [] ->
-            %% No Failures, go generate and lock onboarding
+            %% No Failures, go generate key
             ecc508:wake(Pid),
-            %% Generate ONBOARDING slot and lock the slot
-            ok = gen_compact_key(Pid, ?ONBOARDING_SLOT),
-            ok = ecc508:lock(Pid, {slot, ?ONBOARDING_SLOT}),
+            %% Generate KEY slot. We currently do not lock the slot which 
+            %% may allow key regeneration at some point
+            ok = gen_compact_key(Pid, ?KEY_SLOT),
             ecc508:idle(Pid),
             ok;
         Failures ->
             {error, Failures}
     end.
 
--spec handle_onboarding_key(#state{}) -> {ok, string()} | {error, term()}.
-handle_onboarding_key(#state{ecc_handle=Pid}) ->
+-spec handle_miner_key(#state{}) -> {ok, string()} | {error, term()}.
+handle_miner_key(#state{ecc_handle=Pid}) ->
     ecc508:wake(Pid),
-    case ecc508:genkey(Pid, public, ?ONBOARDING_SLOT) of
+    case ecc508:genkey(Pid, public, ?KEY_SLOT) of
         {error, Error} ->
             {error, Error};
         {ok, PubKey} ->
@@ -183,12 +176,10 @@ run_tests([slot_config=N | Tail], Pid, Acc) ->
     run_tests(Tail, Pid, [{N, check_slot_configuration(Pid)} | Acc]);
 run_tests([key_config=N | Tail], Pid, Acc) ->
     run_tests(Tail, Pid, [{N, check_key_configuration(Pid)} | Acc]);
-run_tests([onboarding_key=N | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{N, check_onboarding_key(Pid)} | Acc]);
+run_tests([miner_key=N | Tail], Pid, Acc) ->
+    run_tests(Tail, Pid, [{N, check_miner_key(Pid)} | Acc]);
 run_tests([{slot_unlocked, Slot}=N | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{N, check_slot_unlocked(Slot, Pid)} | Acc]);
-run_tests([{slot_locked, Slot}=N | Tail], Pid, Acc) ->
-    run_tests(Tail, Pid, [{N, check_slot_locked(Slot, Pid)} | Acc]).
+    run_tests(Tail, Pid, [{N, check_slot_unlocked(Slot, Pid)} | Acc]).
 
 
 
@@ -199,13 +190,12 @@ run_tests([{slot_locked, Slot}=N | Tail], Pid, Acc) ->
 %%
 %% 2. The configuration and data zone are locked
 %%
-%% 3. The configuraiton slots are configured to be ECDH/ECC slots for
-%% all but the onboarding slot which is ECC only
+%% 3. The configuraiton slots are configured to be ECDH/ECC slots
 %%
 %% 4. The key configuration is set to ecc key configuration for all
 %% slots
 %%
-%% 5. The onboarding slot is locked and has a key in it.
+%% 5. The miner key slot is locked and has a key in it.
 %%
 handle_test(State=#state{}) ->
     run_tests([serial_num,
@@ -213,8 +203,7 @@ handle_test(State=#state{}) ->
                {zone_locked, data},
                slot_config,
                key_config,
-               onboarding_key,
-               {slot_locked, ?ONBOARDING_SLOT}
+               miner_key
               ], State).
 
 -spec check_serial(pid()) -> ok | {error, term()}.
@@ -244,14 +233,6 @@ check_slot_unlocked(Slot, Pid) ->
         {error, Error} -> {error, Error}
     end.
 
--spec check_slot_locked(non_neg_integer(), pid()) -> ok | {error, term()}.
-check_slot_locked(Slot, Pid) ->
-    case ecc508:get_slot_locked(Pid, Slot) of
-        true -> ok;
-        false -> {error, unlocked};
-        {error, Error} -> {error, Error}
-    end.
-
 -spec check_slot_configuration(pid()) -> ok | {error, term()}.
 check_slot_configuration(Pid) ->
     ECCConfig = ecc508:ecc_slot_config(),
@@ -261,9 +242,7 @@ check_slot_configuration(Pid) ->
                                  external_signatures]},
     lists:foldl(fun(Slot, ok) ->
                         case ecc508:get_slot_config(Pid, Slot) of
-                            {ok, ECCConfig} when Slot == ?ONBOARDING_SLOT ->
-                                ok;
-                            {ok, ECDHConfig} when Slot /= ?ONBOARDING_SLOT ->
+                            {ok, ECDHConfig} ->
                                 ok;
                             {ok, _Other} ->
                                 {error, {invalid_slot_config, Slot}};
@@ -291,9 +270,9 @@ check_key_configuration(Pid) ->
                 end, ok, lists:seq(0, 15)).
 
 
--spec check_onboarding_key(pid()) -> ok | {error, term()}.
-check_onboarding_key(Pid) ->
-    case ecc508:genkey(Pid, public, ?ONBOARDING_SLOT) of
+-spec check_miner_key(pid()) -> ok | {error, term()}.
+check_miner_key(Pid) ->
+    case ecc508:genkey(Pid, public, ?KEY_SLOT) of
         {ok, PubKey} ->
             case ecc_compact:is_compact(PubKey) of
                 {true, _} -> ok;
