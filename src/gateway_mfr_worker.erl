@@ -12,6 +12,7 @@
          terminate/2]).
 %% api
 -export([ecc_provision/0,
+         ecc_provision_onboard/0,
          ecc_test/0,
          ecc_miner/0]).
 
@@ -25,6 +26,9 @@
 
 ecc_provision() ->
     gen_server:call(?WORKER, ecc_provision).
+
+ecc_provision_onboard() ->
+    gen_server:call(?WORKER, ecc_provision_onboard).
 
 ecc_test() ->
     gen_server:call(?WORKER, ecc_test).
@@ -49,6 +53,8 @@ handle_call(ecc_provision, _From, State=#state{}) ->
         ok -> {reply, handle_provision(State), State};
         {error, Error} -> {reply, {error, Error}, State}
     end;
+handle_call(ecc_provision_onboard, _From, State=#state{}) ->
+    {reply, handle_provision_miner_key(State), State};
 handle_call(ecc_test, _From, State=#state{}) ->
     {reply, handle_test(State), State};
 handle_call(ecc_miner, _From, State=#state{}) ->
@@ -236,7 +242,7 @@ check_slot_configuration(Pid) ->
                                  external_signatures]},
     lists:foldl(fun(Slot, ok) ->
                         case ecc508:get_slot_config(Pid, Slot) of
-                            {ok, ECDHConfig} when Slot == ?KEY_SLOT ->
+                            {ok, ECDHConfig} ->
                                 ok;
                             {ok, _Other} ->
                                 {error, {invalid_slot_config, Slot}};

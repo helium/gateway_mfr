@@ -17,6 +17,7 @@ register_all_usage() ->
                    ecc_usage(),
                    ecc_test_usage(),
                    ecc_provision_usage(),
+                   ecc_provision_onboard_usage(),
                    ecc_onboarding_usage()
                   ]).
 
@@ -28,6 +29,7 @@ register_all_cmds() ->
                    ecc_cmd(),
                    ecc_test_cmd(),
                    ecc_provision_cmd(),
+                   ecc_provision_onboard_cmd(),
                    ecc_onboarding_cmd()
                   ]).
 
@@ -40,6 +42,8 @@ ecc_usage() ->
      ["ECC commands\n\n",
       "  test - Validates that the attached ECC is working and locked correctly.\n"
       "  provision - Configures and locks the ECC key slots and miner key.\n"
+      "  provision_onboard - Configures the onboarding key for an ECC that failed \n"
+      "                      previous onboarding key generation.\n"
       "  onboarding - Prints the miner key of a provisioned ECC.\n"
      ]
     ].
@@ -117,6 +121,44 @@ ecc_provision(["ecc", "provision"], [], []) ->
     end;
 ecc_provision([_, _], [], []) ->
     usage.
+
+%%
+%% ecc provision_onboard
+%%
+
+ecc_provision_onboard_cmd() ->
+    [
+     [["ecc", "provision_onboard"], [],
+      [],
+      fun ecc_provision_onboard/3]
+    ].
+
+ecc_provision_onboard_usage() ->
+    [["ecc", "provision_onboard"],
+     ["ecc provision_onboard \n\n",
+      "  Configures and locks the miner (onboarding) keyslot of an ECC.\n"
+      "  This prints the resulting onboarding key.\n"
+     ]
+    ].
+
+ecc_provision_onboard(["ecc", "provision_onboard"], [], []) ->
+    case gateway_mfr_worker:ecc_provision_onboard() of
+        ok ->
+            case gateway_mfr_worker:ecc_miner() of
+                {ok, B58Key} ->
+                    [clique_status:text(B58Key)];
+                {error, Error} ->
+                    Msg = io_lib:format("~p", [Error]),
+                    {exit_status, 1, [clique_status:alert([clique_status:text(Msg)])]}
+            end;
+        {error, Error} ->
+            Msg = io_lib:format("~p", [Error]),
+            {exit_status, 1, [clique_status:alert([clique_status:text(Msg)])]}
+    end;
+ecc_provision_onboard([_, _], [], []) ->
+    usage.
+
+
 
 
 %%
