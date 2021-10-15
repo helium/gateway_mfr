@@ -1,4 +1,5 @@
 # gateway_mfr
+# Note: the ECC608A or ECC608B is compliant with HIP-19. The other chips in this family: ATSHA204A · ATECC108A · ATECC508A are not compliant with HIP-19.
 
 ## Introduction
 
