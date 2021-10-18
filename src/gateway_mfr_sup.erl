@@ -35,7 +35,7 @@ init([]) ->
     ChildSpecs = [
                   #{
                     id => gateway_mfr_worker,
-                    start => {gateway_mfr_worker, start_link, []},
+                    start => {gateway_mfr_worker, start_link, [application:get_env(gateway_mfr, crypto, undefined)]},
                     type => worker,
                     restart => permanent
                   }

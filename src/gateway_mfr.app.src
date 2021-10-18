@@ -9,6 +9,7 @@
     public_key,
     ecc_compact,
     ecc508,
+    erltss2,
     erl_base58,
     lager,
     clique
