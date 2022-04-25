@@ -276,7 +276,11 @@ check_miner_key(Pid) ->
         {ok, PubKey} ->
             case ecc_compact:is_compact(PubKey) of
                 {true, _} -> ok;
-                false -> {error, not_compact}
+                false ->                     
+                    case gen_compact_key(Pid, ?KEY_SLOT) of
+                        {ok, _} -> ok;
+                        {error, Error} -> {error, Error}
+                    end
             end;
         {error, Error} ->
             {error, Error}
@@ -288,7 +292,7 @@ check_miner_key(Pid) ->
 %%
 
 gen_compact_key(Pid, Slot) ->
-    gen_compact_key(Pid, Slot, 100).
+    gen_compact_key(Pid, Slot, 200).
 
 gen_compact_key(_Pid, _Slot, 0) ->
     {error, compact_key_create_failed};
